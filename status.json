@@ -1,0 +1,7 @@
+{
+  "cameraId": "camera1",
+  "cameraName": "테스트 횡단보도",
+  "location": "테스트 지역",
+  "personCount": 4,
+  "danger": true
+}
