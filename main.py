@@ -124,11 +124,18 @@ def update_web_frame(frame):
 
     try:
 
-        # OpenCV 확인 창은 1280x720을 유지하고,
-        # 웹으로 보낼 영상만 조금 작게 만들어 전송 부담을 줄임
+        # 로컬 화질은 기존 유지.
+        # Railway 배포에서는 네트워크/CPU 부담을 더 줄임.
+        if DEPLOY_MODE:
+            web_size = (640, 360)
+            web_quality = 55
+        else:
+            web_size = (960, 540)
+            web_quality = 65
+
         web_frame = cv2.resize(
             frame,
-            (960, 540)
+            web_size
         )
 
         success, encoded_frame = cv2.imencode(
@@ -136,7 +143,7 @@ def update_web_frame(frame):
             web_frame,
             [
                 cv2.IMWRITE_JPEG_QUALITY,
-                65
+                web_quality
             ]
         )
 
@@ -185,6 +192,11 @@ def api_status():
 def api_cameras():
 
     cameras = load_cameras()
+
+    if DEPLOY_MODE:
+        return jsonify(
+            cameras[:1]
+        )
 
     return jsonify(cameras)
 
@@ -1055,6 +1067,12 @@ window_name = (
     f"Smart CCTV - {camera_name}"
 )
 
+# Railway에서는 YOLO를 매 프레임 돌리지 않고
+# 3프레임마다 한 번만 분석하여 영상 지연을 줄임.
+detection_frame_counter = 0
+cached_person_count = 0
+cached_detection_boxes = []
+
 
 while True:
 
@@ -1297,16 +1315,82 @@ while True:
     # YOLO 사람 탐지
     # =====================================================
 
-    results = model(
-        frame,
-        classes=[0],
-        conf=0.25,
-        imgsz=480,
-        verbose=False
+    detection_frame_counter += 1
+
+    should_run_detection = (
+        not DEPLOY_MODE
+        or detection_frame_counter % 3 == 1
     )
 
-    person_count = 0
+    if should_run_detection:
+        results = model(
+            frame,
+            classes=[0],
+            conf=0.25,
+            imgsz=480,
+            verbose=False
+        )
 
+        person_count = 0
+        current_detection_boxes = []
+
+        for result in results:
+            boxes = result.boxes
+
+            for box in boxes:
+                x1, y1, x2, y2 = map(
+                    int,
+                    box.xyxy[0]
+                )
+
+                points_to_check = [
+                    (x1, y1),
+                    (x2, y1),
+                    (x1, y2),
+                    (x2, y2),
+                    (
+                        int((x1 + x2) / 2),
+                        int((y1 + y2) / 2)
+                    )
+                ]
+
+                is_inside = False
+
+                for point in points_to_check:
+                    test = cv2.pointPolygonTest(
+                        roi_polygon,
+                        point,
+                        False
+                    )
+
+                    if test >= 0:
+                        is_inside = True
+                        break
+
+                if is_inside:
+                    person_count += 1
+
+                current_detection_boxes.append(
+                    (
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        is_inside
+                    )
+                )
+
+        cached_person_count = person_count
+        cached_detection_boxes = (
+            current_detection_boxes
+        )
+
+    else:
+        person_count = (
+            cached_person_count
+        )
+
+    # ROI는 모든 프레임에 표시
     cv2.polylines(
         frame,
         [roi_polygon],
@@ -1315,58 +1399,38 @@ while True:
         thickness=2
     )
 
-    for result in results:
-        boxes = result.boxes
+    # 탐지를 건너뛴 프레임에서는
+    # 직전 탐지 박스를 그대로 사용
+    for (
+        x1,
+        y1,
+        x2,
+        y2,
+        is_inside
+    ) in cached_detection_boxes:
 
-        for box in boxes:
-            x1, y1, x2, y2 = map(
-                int,
-                box.xyxy[0]
+        if is_inside:
+            box_color = (
+                0,
+                0,
+                255
             )
+            box_thickness = 2
+        else:
+            box_color = (
+                0,
+                255,
+                0
+            )
+            box_thickness = 1
 
-            points_to_check = [
-                (x1, y1),
-                (x2, y1),
-                (x1, y2),
-                (x2, y2),
-                (
-                    int((x1 + x2) / 2),
-                    int((y1 + y2) / 2)
-                )
-            ]
-
-            is_inside = False
-
-            for point in points_to_check:
-                test = cv2.pointPolygonTest(
-                    roi_polygon,
-                    point,
-                    False
-                )
-
-                if test >= 0:
-                    is_inside = True
-                    break
-
-            if is_inside:
-                person_count += 1
-
-                cv2.rectangle(
-                    frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 0, 255),
-                    2
-                )
-
-            else:
-                cv2.rectangle(
-                    frame,
-                    (x1, y1),
-                    (x2, y2),
-                    (0, 255, 0),
-                    1
-                )
+        cv2.rectangle(
+            frame,
+            (x1, y1),
+            (x2, y2),
+            box_color,
+            box_thickness
+        )
 
 
     # =====================================================
