@@ -133,10 +133,8 @@ Smart CCTV Server is running!
 
 Vercel에 React 프론트엔드를 배포하여 외부에서도 웹 대시보드를 사용할 수 있습니다.
 
-> Vercel 배포 주소는 프로젝트의 실제 Production Domain을 이 부분에 추가해 주세요.
-
 ```text
-https://YOUR-VERCEL-DOMAIN.vercel.app
+https://smartcity-crosswalk.vercel.app/
 ```
 
 ---
