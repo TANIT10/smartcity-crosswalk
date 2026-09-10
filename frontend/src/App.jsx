@@ -5,6 +5,10 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   'http://127.0.0.1:5000'
 
+const IS_LOCAL_CCTV =
+  API_BASE_URL.includes('127.0.0.1') ||
+  API_BASE_URL.includes('localhost')
+
 function App() {
   const [status, setStatus] = useState({
     cameraId: 'camera1',
@@ -308,7 +312,7 @@ function App() {
           <div className="panel-header">
             <div>
               <span className="panel-label">
-                LIVE CCTV
+                {IS_LOCAL_CCTV ? 'LIVE CCTV' : 'CCTV DEMO'}
               </span>
 
               <h2>
@@ -338,7 +342,7 @@ function App() {
 
               <span className="live-badge">
                 <span className="live-dot"></span>
-                LIVE
+                {IS_LOCAL_CCTV ? 'LIVE' : 'DEMO'}
               </span>
             </div>
           </div>
@@ -346,7 +350,11 @@ function App() {
           <div className="cctv-view">
             <img
               src={`${API_BASE_URL}/video_feed`}
-              alt="실시간 CCTV"
+              alt={
+                IS_LOCAL_CCTV
+                  ? '실시간 CCTV'
+                  : '샘플 CCTV 영상'
+              }
               className="cctv-video"
             />
 
