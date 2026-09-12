@@ -1378,11 +1378,21 @@ while True:
     )
 
     if should_run_detection:
+        # 로컬 촬영/테스트에서는 군중·야간·작은 객체 탐지를 조금 더 잘 잡도록
+        # 입력 크기를 높이고 confidence 기준을 낮춤.
+        # 배포 환경은 기존 경량 설정을 유지하여 서버 부담을 늘리지 않음.
+        if DEPLOY_MODE:
+            detection_conf = 0.25
+            detection_imgsz = 480
+        else:
+            detection_conf = 0.15
+            detection_imgsz = 640
+
         results = model(
             frame,
             classes=[0],
-            conf=0.25,
-            imgsz=480,
+            conf=detection_conf,
+            imgsz=detection_imgsz,
             verbose=False
         )
 

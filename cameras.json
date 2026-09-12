@@ -3,12 +3,12 @@
     "id": "camera1",
     "name": "테스트 횡단보도",
     "location": "테스트 지역",
-    "url": "https://www.youtube.com/watch?v=M3EYAY2MftI"
+    "url": "https://www.youtube.com/live/zMCea32gpmg?si=MA1inxYM21KZssdh"
   },
   {
     "id": "camera2",
     "name": "테스트 횡단보도 2",
     "location": "테스트 지역 2",
-    "url": "https://www.youtube.com/live/DnqX7X6Pefg"
+    "url": "https://www.youtube.com/live/NIzZMfySVx8?si=W7K062dpUrFitwhP"
   }
 ]
