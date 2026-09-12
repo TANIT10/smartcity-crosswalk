@@ -80,6 +80,11 @@ requested_camera_id = None
 status_lock = threading.Lock()
 frame_lock = threading.Lock()
 
+# 배포 환경에서 실제 /video_feed 접속자가 있을 때만
+# YOLO + sample.mp4 처리를 수행하기 위한 접속자 카운터
+viewer_lock = threading.Lock()
+active_video_viewers = 0
+
 
 # =========================================================
 # ROI 전역 변수
@@ -241,28 +246,64 @@ def switch_camera():
 
 def generate_video():
 
-    while True:
+    global active_video_viewers
+    global latest_frame_bytes
 
+    # 브라우저가 실제 영상 스트림에 연결될 때만 증가
+    with viewer_lock:
+        active_video_viewers += 1
+        viewer_count = active_video_viewers
+
+    print(
+        f"[웹] 영상 접속자 연결: {viewer_count}명"
+    )
+
+    # 오래된 마지막 프레임을 바로 보여주지 않도록
+    # 첫 접속 시 배포 환경에서는 프레임을 새로 만들게 함
+    if DEPLOY_MODE and viewer_count == 1:
         with frame_lock:
-            frame_data = latest_frame_bytes
+            latest_frame_bytes = None
 
-        if frame_data is None:
+    try:
+        while True:
 
-            time.sleep(0.03)
+            with frame_lock:
+                frame_data = latest_frame_bytes
 
-            continue
+            if frame_data is None:
 
+                time.sleep(0.03)
 
-        yield (
-            b"--frame\r\n"
-            b"Content-Type: image/jpeg\r\n"
-            b"Cache-Control: no-cache\r\n\r\n"
-            + frame_data
-            + b"\r\n"
+                continue
+
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n"
+                b"Cache-Control: no-cache\r\n\r\n"
+                + frame_data
+                + b"\r\n"
+            )
+
+            time.sleep(0.05)
+
+    except (
+        GeneratorExit,
+        ConnectionError,
+        BrokenPipeError
+    ):
+        pass
+
+    finally:
+        with viewer_lock:
+            active_video_viewers = max(
+                0,
+                active_video_viewers - 1
+            )
+            viewer_count = active_video_viewers
+
+        print(
+            f"[웹] 영상 접속자 종료: {viewer_count}명"
         )
-
-
-        time.sleep(0.05)
 
 
 # =========================================================
@@ -1077,6 +1118,20 @@ cached_detection_boxes = []
 while True:
 
     # =====================================================
+    # 배포 비용 절감: 접속자가 없으면 AI 처리 중지
+    # =====================================================
+
+    if DEPLOY_MODE:
+        with viewer_lock:
+            viewer_count = active_video_viewers
+
+        if viewer_count == 0:
+            # sample.mp4도 읽지 않고 YOLO도 실행하지 않음.
+            # Flask 서버만 살아 있는 상태로 대기.
+            time.sleep(0.5)
+            continue
+
+    # =====================================================
     # 웹에서 CCTV 변경 요청 확인
     # =====================================================
 
@@ -1483,7 +1538,7 @@ while True:
     else:
         cv2.putText(
             frame,
-            "PEDESTRIAN: 0 (SAFE)",
+            "PEDESTRIAN: 0 (NOT DETECTED)",
             (30, 80),
             cv2.FONT_HERSHEY_SIMPLEX,
             1,
